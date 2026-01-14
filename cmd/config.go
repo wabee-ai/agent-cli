@@ -175,8 +175,8 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 	output.Success(fmt.Sprintf("Configuration saved to %s", config.ConfigFile()))
 	fmt.Println()
 	fmt.Println("You can now use the CLI:")
-	fmt.Println("  wabee chat \"Hello, what can you help me with?\"")
-	fmt.Println("  wabee agent health")
+	fmt.Println("  wabee task new \"Hello, what can you help me with?\"")
+	fmt.Println("  wabee agent info")
 
 	return nil
 }

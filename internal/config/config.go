@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -250,7 +251,7 @@ func SetValue(key, value string) error {
 
 	switch key {
 	case "endpoint":
-		profile.Endpoint = value
+		profile.Endpoint = NormalizeEndpoint(value)
 	case "api-key", "api_key":
 		profile.APIKey = value
 	case "auth-token", "auth_token":
@@ -274,6 +275,7 @@ func SetValue(key, value string) error {
 // CreateProfile creates a new profile
 func CreateProfile(name string, profile Profile) error {
 	config := Get()
+	profile.Endpoint = NormalizeEndpoint(profile.Endpoint)
 	config.Profiles[name] = profile
 	return Save()
 }
@@ -312,4 +314,13 @@ func DeleteProfile(name string) error {
 func Exists() bool {
 	_, err := os.Stat(ConfigFile())
 	return err == nil
+}
+
+// NormalizeEndpoint removes /core or /core/v1 suffixes from the endpoint URL.
+// The API client adds the /core/v1 prefix automatically.
+func NormalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimSuffix(endpoint, "/")
+	endpoint = strings.TrimSuffix(endpoint, "/core/v1")
+	endpoint = strings.TrimSuffix(endpoint, "/core")
+	return endpoint
 }

@@ -4,27 +4,15 @@ A command-line interface for interacting with Wabee AI agents.
 
 ## Installation
 
-### Homebrew (macOS/Linux)
-
-```bash
-brew install wabee-ai/tap/wabee
-```
-
-### Go Install
-
-```bash
-go install github.com/wabee-ai/wabee-cli@latest
-```
-
 ### Binary Download
 
-Download pre-built binaries from the [releases page](https://github.com/wabee-ai/wabee-cli/releases).
+Download pre-built binaries from the [releases page](https://github.com/wabee-ai/agent-cli/releases).
 
 ### From Source
 
 ```bash
-git clone https://github.com/wabee-ai/wabee-cli.git
-cd wabee-cli
+git clone https://github.com/wabee-ai/agent-cli.git
+cd agent-cli
 make install
 ```
 
@@ -33,9 +21,6 @@ make install
 ```bash
 # Initialize configuration
 wabee config init
-
-# Check connection
-wabee agent health
 
 # Start a task with the agent
 wabee task new "What can you help me with?"
@@ -138,9 +123,6 @@ wabee config use production
 ### Agent Information
 
 ```bash
-# Health check
-wabee agent health
-
 # Get metadata
 wabee agent info
 
@@ -214,7 +196,7 @@ defaults:
 ```yaml
 - name: Install Wabee CLI
   run: |
-    curl -L https://github.com/wabee-ai/wabee-cli/releases/latest/download/wabee_linux_amd64.tar.gz | tar xz
+    curl -L https://github.com/wabee-ai/agent-cli/releases/latest/download/wabee_linux_amd64.tar.gz | tar xz
     sudo mv wabee /usr/local/bin/
 
 - name: Run Agent

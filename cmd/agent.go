@@ -26,16 +26,6 @@ Examples:
 	RunE: runAgentInfo,
 }
 
-var agentHealthCmd = &cobra.Command{
-	Use:   "health",
-	Short: "Check agent health",
-	Long: `Check the health status of the agent.
-
-Examples:
-  wabee agent health`,
-	RunE: runAgentHealth,
-}
-
 var agentToolsCmd = &cobra.Command{
 	Use:     "tools",
 	Aliases: []string{"tool"},
@@ -51,7 +41,6 @@ Examples:
 
 func init() {
 	agentCmd.AddCommand(agentInfoCmd)
-	agentCmd.AddCommand(agentHealthCmd)
 	agentCmd.AddCommand(agentToolsCmd)
 }
 
@@ -66,32 +55,6 @@ func runAgentInfo(cmd *cobra.Command, args []string) error {
 	}
 
 	return formatter.Output(info)
-}
-
-func runAgentHealth(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-	apiClient := client.New()
-	formatter := getFormatter()
-
-	// Check connectivity first
-	if !isQuiet() {
-		output.Info(fmt.Sprintf("Checking %s...", client.New().BaseURL()))
-	}
-
-	health, err := apiClient.GetHealth(ctx)
-	if err != nil {
-		output.Error("Connection failed")
-		return fmt.Errorf("health check failed: %w", err)
-	}
-
-	if !isQuiet() {
-		output.Success("Connected")
-		if health.Status == "healthy" || health.Status == "ok" {
-			output.Success("Agent is healthy")
-		}
-	}
-
-	return formatter.Output(health)
 }
 
 func runAgentTools(cmd *cobra.Command, args []string) error {
