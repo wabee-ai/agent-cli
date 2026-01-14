@@ -37,38 +37,40 @@ wabee config init
 # Check connection
 wabee agent health
 
-# Chat with the agent
-wabee chat "What can you help me with?"
+# Start a task with the agent
+wabee task new "What can you help me with?"
 
 # View session history
 wabee sessions list
 
 # Debug a session
-wabee trace <session-id>
+wabee sessions trace <session-id>
 ```
 
 ## Usage
 
-### Chat
+### Task
+
+Start new tasks or continue conversations with the agent.
 
 ```bash
 # Simple message
-wabee chat "What is the weather in NYC?"
+wabee task new "What is the weather in NYC?"
 
 # Continue a conversation
-wabee chat --session abc123 "And tomorrow?"
+wabee task followup --session abc123 "And tomorrow?"
 
-# Stream response (default)
-wabee chat --stream "Explain quantum computing"
+# Stream response (enabled by default)
+wabee task new --stream "Explain quantum computing"
+
+# Disable streaming
+wabee task new --stream=false "Quick question"
 
 # Pipe input
-cat prompt.txt | wabee chat
+cat prompt.txt | wabee task new
 
 # Output as JSON
-wabee chat --output json "List 5 items"
-
-# Interactive mode
-wabee chat -i
+wabee task new --output json "List 5 items"
 ```
 
 ### Sessions
@@ -83,30 +85,28 @@ wabee sessions get <session-id>
 
 # View execution trace
 wabee sessions trace <session-id>
-
-# Export session
-wabee sessions export <session-id> --format json > session.json
-wabee sessions export <session-id> --format markdown > session.md
-
-# Delete session
-wabee sessions delete <session-id>
 ```
 
 ### Execution Tracing
 
+View detailed execution traces for debugging agent behavior:
+
 ```bash
 # View trace
-wabee trace <session-id>
+wabee sessions trace <session-id>
 
 # Filter by request
-wabee trace <session-id> --request req-001
+wabee sessions trace <session-id> --request-id req-001
 
-# Show only tool calls
-wabee trace <session-id> --tools-only
+# Show full content (no truncation)
+wabee sessions trace <session-id> --full
+
+# Set max content length (default 200)
+wabee sessions trace <session-id> --max-content-length 500
 
 # Output formats
-wabee trace <session-id> --output json
-wabee trace <session-id> --output tree
+wabee sessions trace <session-id> --output json
+wabee sessions trace <session-id> --output tree
 ```
 
 ### Configuration
@@ -118,6 +118,11 @@ wabee config init
 # Set values
 wabee config set endpoint https://api.wabee.ai
 wabee config set api-key <your-key>
+wabee config set auth-token <your-token>
+wabee config set timeout 60
+wabee config set output json
+wabee config set stream true
+wabee config set color auto
 
 # Show current config
 wabee config show
@@ -125,6 +130,8 @@ wabee config show
 # Manage profiles
 wabee config profile list
 wabee config profile create production
+wabee config profile set production
+wabee config profile delete staging
 wabee config use production
 ```
 
@@ -139,6 +146,16 @@ wabee agent info
 
 # List tools
 wabee agent tools
+```
+
+### Version
+
+```bash
+# Show version
+wabee version
+
+# Verbose version info (includes commit and build date)
+wabee version -v
 ```
 
 ## Configuration
@@ -157,6 +174,7 @@ profiles:
   production:
     endpoint: https://api.wabee.ai
     api_key: ${WABEE_API_KEY}
+    auth_token: ${WABEE_AUTH_TOKEN}
     timeout: 60
 
 defaults:
@@ -179,6 +197,7 @@ defaults:
 
 | Option | Short | Description |
 |--------|-------|-------------|
+| `--config` | | Path to config file (default: `~/.wabee/config.yaml`) |
 | `--endpoint` | `-e` | API endpoint URL |
 | `--api-key` | `-k` | API key |
 | `--profile` | `-p` | Configuration profile |
@@ -187,18 +206,6 @@ defaults:
 | `--verbose` | `-v` | Verbose output |
 | `--no-color` | | Disable colors |
 | `--timeout` | | Request timeout (seconds) |
-
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Configuration error |
-| 3 | Authentication error |
-| 4 | Network error |
-| 5 | Agent execution error |
-| 6 | Invalid input |
 
 ## CI/CD Integration
 
@@ -214,7 +221,7 @@ defaults:
   env:
     WABEE_API_KEY: ${{ secrets.WABEE_API_KEY }}
     WABEE_ENDPOINT: ${{ vars.WABEE_ENDPOINT }}
-  run: wabee chat --output json "Analyze this PR"
+  run: wabee task new --output json "Analyze this PR"
 ```
 
 ## Development

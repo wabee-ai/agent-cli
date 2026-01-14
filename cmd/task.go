@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -15,9 +14,8 @@ import (
 )
 
 var (
-	taskSessionFlag     string
-	taskStreamFlag      bool
-	taskInteractiveFlag bool
+	taskSessionFlag string
+	taskStreamFlag  bool
 )
 
 var taskCmd = &cobra.Command{
@@ -41,8 +39,7 @@ var taskNewCmd = &cobra.Command{
 	Short: "Start a new task with the agent",
 	Long: `Start a new task with a Wabee agent.
 
-The message can be provided as an argument, piped from stdin, or
-entered interactively.
+The message can be provided as an argument or piped from stdin.
 
 Examples:
   # Simple message
@@ -55,10 +52,7 @@ Examples:
   cat prompt.txt | wabee task new
 
   # Output as JSON
-  wabee task new --output json "List 5 items"
-
-  # Interactive mode
-  wabee task new -i`,
+  wabee task new --output json "List 5 items"`,
 	RunE: runTaskNew,
 }
 
@@ -84,7 +78,6 @@ Examples:
 func init() {
 	// Flags for 'task new'
 	taskNewCmd.Flags().BoolVar(&taskStreamFlag, "stream", true, "stream response in real-time")
-	taskNewCmd.Flags().BoolVarP(&taskInteractiveFlag, "interactive", "i", false, "start interactive task mode")
 
 	// Flags for 'task followup'
 	taskFollowupCmd.Flags().StringVarP(&taskSessionFlag, "session", "s", "", "session ID to continue conversation (required)")
@@ -99,11 +92,6 @@ func init() {
 func runTaskNew(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	apiClient := client.New()
-
-	// Handle interactive mode
-	if taskInteractiveFlag {
-		return runInteractiveTask(ctx, apiClient)
-	}
 
 	// Get message from args or stdin
 	message, err := getTaskMessage(args)
@@ -326,99 +314,3 @@ func runStreamingTask(ctx context.Context, apiClient *client.Client, message, se
 	return nil
 }
 
-func runInteractiveTask(ctx context.Context, apiClient *client.Client) error {
-	fmt.Println("Wabee Agent CLI - Interactive Mode")
-	fmt.Println("Type 'exit' or 'quit' to end, 'new' for new session")
-	fmt.Println()
-
-	reader := bufio.NewReader(os.Stdin)
-	currentSession := ""
-
-	for {
-		// Prompt
-		fmt.Print("You: ")
-
-		// Read input
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println("\nGoodbye!")
-				return nil
-			}
-			return fmt.Errorf("failed to read input: %w", err)
-		}
-
-		input = strings.TrimSpace(input)
-
-		// Handle special commands
-		switch strings.ToLower(input) {
-		case "exit", "quit", "q":
-			if currentSession != "" {
-				fmt.Printf("Session saved: %s\n", currentSession)
-			}
-			fmt.Println("Goodbye!")
-			return nil
-
-		case "new":
-			currentSession = ""
-			fmt.Println("Starting new session...")
-			continue
-
-		case "session":
-			if currentSession != "" {
-				fmt.Printf("Current session: %s\n", currentSession)
-			} else {
-				fmt.Println("No active session")
-			}
-			continue
-
-		case "help", "?":
-			fmt.Println("Commands:")
-			fmt.Println("  exit, quit, q  - Exit interactive mode")
-			fmt.Println("  new            - Start a new session")
-			fmt.Println("  session        - Show current session ID")
-			fmt.Println("  help, ?        - Show this help")
-			continue
-
-		case "":
-			continue
-		}
-
-		// Send message
-		fmt.Print("Agent: ")
-
-		var responseBuilder strings.Builder
-
-		result, err := apiClient.ChatStream(ctx, input, currentSession, func(event models.StreamEventData) error {
-			// Check for errors
-			if event.FinishReason == "error" {
-				return fmt.Errorf("agent error: %s", event.GetContent())
-			}
-
-			// Handle text output
-			if event.AgentStep == "TYPING_TEXT" || event.AgentStep == "FINAL_ANSWER" {
-				content := event.GetContent()
-				if content != "" {
-					fmt.Print(content)
-					responseBuilder.WriteString(content)
-				}
-			}
-
-			return nil
-		})
-
-		fmt.Println()
-
-		if err != nil {
-			output.Error(err.Error())
-		} else if result != nil {
-			// Update session for continuity and show IDs
-			currentSession = result.SessionID
-			fmt.Println()
-			output.Info(fmt.Sprintf("Session ID: %s", result.SessionID))
-			output.Info(fmt.Sprintf("Request ID: %s", result.RequestID))
-		}
-
-		fmt.Println()
-	}
-}
