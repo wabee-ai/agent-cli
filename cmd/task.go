@@ -1,0 +1,424 @@
+package cmd
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/wabee-ai/wabee-cli/internal/client"
+	"github.com/wabee-ai/wabee-cli/internal/output"
+	"github.com/wabee-ai/wabee-cli/pkg/models"
+)
+
+var (
+	taskSessionFlag     string
+	taskStreamFlag      bool
+	taskInteractiveFlag bool
+)
+
+var taskCmd = &cobra.Command{
+	Use:   "task",
+	Short: "Send tasks to the agent",
+	Long: `Send tasks to a Wabee agent and receive responses.
+
+Use 'task new' to start a new task or 'task followup' to continue
+an existing session.
+
+Examples:
+  # Start a new task
+  wabee task new "What is the weather in NYC?"
+
+  # Continue an existing session
+  wabee task followup --session abc123 "And tomorrow?"`,
+}
+
+var taskNewCmd = &cobra.Command{
+	Use:   "new [message]",
+	Short: "Start a new task with the agent",
+	Long: `Start a new task with a Wabee agent.
+
+The message can be provided as an argument, piped from stdin, or
+entered interactively.
+
+Examples:
+  # Simple message
+  wabee task new "What is the weather in NYC?"
+
+  # Stream response in real-time
+  wabee task new --stream "Explain quantum computing"
+
+  # Pipe input from file
+  cat prompt.txt | wabee task new
+
+  # Output as JSON
+  wabee task new --output json "List 5 items"
+
+  # Interactive mode
+  wabee task new -i`,
+	RunE: runTaskNew,
+}
+
+var taskFollowupCmd = &cobra.Command{
+	Use:   "followup --session <session-id> [message]",
+	Short: "Continue a task in an existing session",
+	Long: `Send a follow-up message to continue a task in an existing session.
+
+The session ID is required to continue an existing conversation.
+
+Examples:
+  # Continue a conversation
+  wabee task followup --session abc123 "And tomorrow?"
+
+  # Stream the response
+  wabee task followup --session abc123 --stream "Tell me more"
+
+  # Pipe input from file
+  cat followup.txt | wabee task followup --session abc123`,
+	RunE: runTaskFollowup,
+}
+
+func init() {
+	// Flags for 'task new'
+	taskNewCmd.Flags().BoolVar(&taskStreamFlag, "stream", true, "stream response in real-time")
+	taskNewCmd.Flags().BoolVarP(&taskInteractiveFlag, "interactive", "i", false, "start interactive task mode")
+
+	// Flags for 'task followup'
+	taskFollowupCmd.Flags().StringVarP(&taskSessionFlag, "session", "s", "", "session ID to continue conversation (required)")
+	taskFollowupCmd.MarkFlagRequired("session")
+	taskFollowupCmd.Flags().BoolVar(&taskStreamFlag, "stream", true, "stream response in real-time")
+
+	// Add subcommands to task
+	taskCmd.AddCommand(taskNewCmd)
+	taskCmd.AddCommand(taskFollowupCmd)
+}
+
+func runTaskNew(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+	apiClient := client.New()
+
+	// Handle interactive mode
+	if taskInteractiveFlag {
+		return runInteractiveTask(ctx, apiClient)
+	}
+
+	// Get message from args or stdin
+	message, err := getTaskMessage(args)
+	if err != nil {
+		return err
+	}
+
+	if message == "" {
+		return fmt.Errorf("no message provided. Use: wabee task new \"your message\" or pipe from stdin")
+	}
+
+	// Determine output format
+	format := getOutputFormat()
+
+	// Non-streaming mode or JSON output
+	if !taskStreamFlag || format == "json" {
+		return runNonStreamingTask(ctx, apiClient, message, "")
+	}
+
+	// Streaming mode
+	return runStreamingTask(ctx, apiClient, message, "")
+}
+
+func runTaskFollowup(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+	apiClient := client.New()
+
+	// Get message from args or stdin
+	message, err := getTaskMessage(args)
+	if err != nil {
+		return err
+	}
+
+	if message == "" {
+		return fmt.Errorf("no message provided. Use: wabee task followup --session <id> \"your message\" or pipe from stdin")
+	}
+
+	// Determine output format
+	format := getOutputFormat()
+
+	// Non-streaming mode or JSON output
+	if !taskStreamFlag || format == "json" {
+		return runNonStreamingTask(ctx, apiClient, message, taskSessionFlag)
+	}
+
+	// Streaming mode
+	return runStreamingTask(ctx, apiClient, message, taskSessionFlag)
+}
+
+func getTaskMessage(args []string) (string, error) {
+	// Check if message is provided as argument
+	if len(args) > 0 {
+		return strings.Join(args, " "), nil
+	}
+
+	// Check if stdin has data
+	stat, _ := os.Stdin.Stat()
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		// stdin has data
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("failed to read from stdin: %w", err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+
+	return "", nil
+}
+
+func runNonStreamingTask(ctx context.Context, apiClient *client.Client, message, sessionID string) error {
+	formatter := getFormatter()
+	format := getOutputFormat()
+
+	if !isQuiet() && isVerbose() {
+		if sessionID != "" {
+			output.Info(fmt.Sprintf("Sending message to session %s...", sessionID))
+		} else {
+			output.Info("Starting new task...")
+		}
+	}
+
+	resp, err := apiClient.Chat(ctx, message, sessionID)
+	if err != nil {
+		return fmt.Errorf("task failed: %w", err)
+	}
+
+	// Print answer label for text output
+	if format != "json" {
+		fmt.Println(output.Bold("Answer:"))
+	}
+
+	if err := formatter.Output(resp); err != nil {
+		return err
+	}
+
+	// Show session and request IDs for text output
+	if format != "json" && resp.SessionID != "" && !isQuiet() {
+		fmt.Println()
+		output.Info(fmt.Sprintf("Session ID: %s", resp.SessionID))
+		output.Info(fmt.Sprintf("Request ID: %s", resp.RequestID))
+	}
+
+	return nil
+}
+
+func runStreamingTask(ctx context.Context, apiClient *client.Client, message, sessionID string) error {
+	var responseBuilder strings.Builder
+	var spinner *output.Spinner
+	answerLabelPrinted := false
+
+	// Show spinner while waiting
+	if !isQuiet() {
+		spinner = output.NewSpinner("Thinking...")
+	}
+
+	result, err := apiClient.ChatStream(ctx, message, sessionID, func(event models.StreamEventData) error {
+		// Check for errors
+		if event.FinishReason == "error" {
+			if spinner != nil {
+				spinner.Stop()
+				spinner = nil
+			}
+			return fmt.Errorf("agent error: %s", event.GetContent())
+		}
+
+		// Handle based on agent_step
+		switch event.AgentStep {
+		case "TYPING_TEXT", "FINAL_ANSWER":
+			// Stop spinner on first content
+			if spinner != nil {
+				spinner.Stop()
+				spinner = nil
+			}
+
+			// Print answer label before first content
+			if !answerLabelPrinted {
+				fmt.Println(output.Bold("Answer:"))
+				answerLabelPrinted = true
+			}
+
+			// Print content as it arrives
+			content := event.GetContent()
+			if content != "" {
+				fmt.Print(content)
+				responseBuilder.WriteString(content)
+			}
+
+		case "PLANNING", "ASSESSING_COMPLEXITY":
+			if spinner != nil {
+				spinner.UpdateMessage("Planning...")
+			}
+
+		case "REASONING", "ADAPTING_APPROACH":
+			if spinner != nil {
+				spinner.UpdateMessage("Reasoning...")
+			}
+
+		case "SELECTING_TOOL":
+			if spinner != nil {
+				spinner.UpdateMessage("Selecting tool...")
+			}
+
+		case "TOOL_CALLING":
+			if spinner != nil {
+				spinner.UpdateMessage("Executing tool...")
+			}
+
+		case "TOOL_FEEDBACK":
+			if spinner != nil {
+				spinner.UpdateMessage("Processing tool output...")
+			}
+
+		case "DELEGATING", "TASK_DELEGATION":
+			if spinner != nil {
+				spinner.UpdateMessage("Delegating to sub-agent...")
+			}
+
+		case "STARTING", "PREPARING":
+			if spinner != nil {
+				spinner.UpdateMessage("Starting...")
+			}
+
+		case "END":
+			if spinner != nil {
+				spinner.Stop()
+				spinner = nil
+			}
+		}
+
+		return nil
+	})
+
+	// Always stop spinner after stream ends (in case no clearing event was received)
+	if spinner != nil {
+		spinner.Stop()
+		spinner = nil
+	}
+
+	// Ensure newline after response
+	if responseBuilder.Len() > 0 {
+		fmt.Println()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// If no content was received and no error, inform the user
+	if responseBuilder.Len() == 0 {
+		return fmt.Errorf("no response received from agent")
+	}
+
+	// Always show session_id and request_id after the response
+	if result != nil && !isQuiet() {
+		fmt.Println()
+		output.Info(fmt.Sprintf("Session ID: %s", result.SessionID))
+		output.Info(fmt.Sprintf("Request ID: %s", result.RequestID))
+	}
+
+	return nil
+}
+
+func runInteractiveTask(ctx context.Context, apiClient *client.Client) error {
+	fmt.Println("Wabee Agent CLI - Interactive Mode")
+	fmt.Println("Type 'exit' or 'quit' to end, 'new' for new session")
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+	currentSession := ""
+
+	for {
+		// Prompt
+		fmt.Print("You: ")
+
+		// Read input
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("\nGoodbye!")
+				return nil
+			}
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+
+		input = strings.TrimSpace(input)
+
+		// Handle special commands
+		switch strings.ToLower(input) {
+		case "exit", "quit", "q":
+			if currentSession != "" {
+				fmt.Printf("Session saved: %s\n", currentSession)
+			}
+			fmt.Println("Goodbye!")
+			return nil
+
+		case "new":
+			currentSession = ""
+			fmt.Println("Starting new session...")
+			continue
+
+		case "session":
+			if currentSession != "" {
+				fmt.Printf("Current session: %s\n", currentSession)
+			} else {
+				fmt.Println("No active session")
+			}
+			continue
+
+		case "help", "?":
+			fmt.Println("Commands:")
+			fmt.Println("  exit, quit, q  - Exit interactive mode")
+			fmt.Println("  new            - Start a new session")
+			fmt.Println("  session        - Show current session ID")
+			fmt.Println("  help, ?        - Show this help")
+			continue
+
+		case "":
+			continue
+		}
+
+		// Send message
+		fmt.Print("Agent: ")
+
+		var responseBuilder strings.Builder
+
+		result, err := apiClient.ChatStream(ctx, input, currentSession, func(event models.StreamEventData) error {
+			// Check for errors
+			if event.FinishReason == "error" {
+				return fmt.Errorf("agent error: %s", event.GetContent())
+			}
+
+			// Handle text output
+			if event.AgentStep == "TYPING_TEXT" || event.AgentStep == "FINAL_ANSWER" {
+				content := event.GetContent()
+				if content != "" {
+					fmt.Print(content)
+					responseBuilder.WriteString(content)
+				}
+			}
+
+			return nil
+		})
+
+		fmt.Println()
+
+		if err != nil {
+			output.Error(err.Error())
+		} else if result != nil {
+			// Update session for continuity and show IDs
+			currentSession = result.SessionID
+			fmt.Println()
+			output.Info(fmt.Sprintf("Session ID: %s", result.SessionID))
+			output.Info(fmt.Sprintf("Request ID: %s", result.RequestID))
+		}
+
+		fmt.Println()
+	}
+}
