@@ -81,7 +81,7 @@ func init() {
 
 	// Flags for 'task followup'
 	taskFollowupCmd.Flags().StringVarP(&taskSessionFlag, "session", "s", "", "session ID to continue conversation (required)")
-	taskFollowupCmd.MarkFlagRequired("session")
+	_ = taskFollowupCmd.MarkFlagRequired("session")
 	taskFollowupCmd.Flags().BoolVar(&taskStreamFlag, "stream", true, "stream response in real-time")
 
 	// Add subcommands to task

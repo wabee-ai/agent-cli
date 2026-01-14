@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -82,9 +83,9 @@ func Init() error {
 	viper.AutomaticEnv()
 
 	// Bind specific environment variables
-	viper.BindEnv("api_key", "WABEE_API_KEY")
-	viper.BindEnv("endpoint", "WABEE_ENDPOINT")
-	viper.BindEnv("profile", "WABEE_PROFILE")
+	_ = viper.BindEnv("api_key", "WABEE_API_KEY")
+	_ = viper.BindEnv("endpoint", "WABEE_ENDPOINT")
+	_ = viper.BindEnv("profile", "WABEE_PROFILE")
 
 	// Set defaults
 	viper.SetDefault("default_profile", "default")
@@ -257,7 +258,9 @@ func SetValue(key, value string) error {
 	case "auth-token", "auth_token":
 		profile.AuthToken = value
 	case "timeout":
-		fmt.Sscanf(value, "%d", &profile.Timeout)
+		if t, err := strconv.Atoi(value); err == nil {
+			profile.Timeout = t
+		}
 	case "output":
 		config.Defaults.Output = value
 	case "stream":

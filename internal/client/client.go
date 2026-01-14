@@ -124,8 +124,8 @@ func handleResponse(resp *http.Response, target interface{}) error {
 			Code:    resp.StatusCode,
 			Message: http.StatusText(resp.StatusCode),
 		}
-		// Try to parse error response
-		json.Unmarshal(body, apiErr)
+		// Try to parse error response (ignore error, we have defaults)
+		_ = json.Unmarshal(body, apiErr)
 		return apiErr
 	}
 
@@ -306,7 +306,9 @@ func (c *Client) parseSSE(reader io.Reader, callback StreamCallback) error {
 		if eventType != "" {
 			eventData.Type = eventType
 		}
-		callback(eventData)
+		if err := callback(eventData); err != nil {
+			return err
+		}
 	}
 
 	return scanner.Err()
