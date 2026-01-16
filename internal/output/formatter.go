@@ -343,58 +343,83 @@ func (f *Formatter) printTraceStep(step models.TraceStep, prefix string, isLast 
 		childPrefix += "│   "
 	}
 
-	// Print tool execution details
-	if step.Tool != nil {
-		toolInfo := step.Tool.Name
-		if step.Tool.Input != nil {
-			inputJSON, _ := json.Marshal(step.Tool.Input)
-			inputStr := string(inputJSON)
-			if f.maxContentLength > 0 {
-				inputStr = truncate(inputStr, f.maxContentLength)
-			}
-			toolInfo += fmt.Sprintf("(%s)", inputStr)
-		}
-		if step.Tool.Output != nil {
-			outputJSON, _ := json.Marshal(step.Tool.Output)
-			outputStr := string(outputJSON)
-			if f.maxContentLength > 0 {
-				outputStr = truncate(outputStr, f.maxContentLength)
-			}
-			toolInfo += fmt.Sprintf(" → %s", outputStr)
-		}
-		if step.Tool.Status != "" {
-			toolInfo += fmt.Sprintf(" [%s]", step.Tool.Status)
-		}
-
-		if f.useColor {
-			fmt.Fprintln(f.writer, treeBranchStyle.Render(childPrefix+"└── ")+treeLeafStyle.Render(toolInfo))
-		} else {
-			fmt.Fprintln(f.writer, childPrefix+"└── "+toolInfo)
-		}
-	} else if step.Content != "" {
-		// Print content if present and no tool
+	if step.Content != "" {
+		// Print content if present
 		content := step.Content
-		if f.maxContentLength > 0 {
+		if f.maxContentLength > 0 && f.maxContentLength < 1000 {
+			// Truncate for short display (single line)
 			content = truncate(content, f.maxContentLength)
-		}
-		contentLine := fmt.Sprintf("%s└── \"%s\"", childPrefix, content)
-
-		if f.useColor {
-			fmt.Fprintln(f.writer, treeBranchStyle.Render(childPrefix+"└── ")+treeLeafStyle.Render("\""+content+"\""))
+			if f.useColor {
+				fmt.Fprintln(f.writer, treeBranchStyle.Render(childPrefix+"└── ")+treeLeafStyle.Render("\""+content+"\""))
+			} else {
+				fmt.Fprintln(f.writer, childPrefix+"└── \""+content+"\"")
+			}
 		} else {
-			fmt.Fprintln(f.writer, contentLine)
+			// Multi-line display: render each line separately with proper styling
+			lines := splitContentLines(content)
+			for i, line := range lines {
+				if i == 0 {
+					// First line with tree connector
+					if f.useColor {
+						fmt.Fprintln(f.writer, treeBranchStyle.Render(childPrefix+"└── ")+treeLeafStyle.Render("\""+line))
+					} else {
+						fmt.Fprintln(f.writer, childPrefix+"└── \""+line)
+					}
+				} else if i == len(lines)-1 {
+					// Last line with closing quote
+					if f.useColor {
+						fmt.Fprintln(f.writer, treeBranchStyle.Render(childPrefix+"    ")+treeLeafStyle.Render(line+"\""))
+					} else {
+						fmt.Fprintln(f.writer, childPrefix+"    "+line+"\"")
+					}
+				} else {
+					// Middle lines
+					if f.useColor {
+						fmt.Fprintln(f.writer, treeBranchStyle.Render(childPrefix+"    ")+treeLeafStyle.Render(line))
+					} else {
+						fmt.Fprintln(f.writer, childPrefix+"    "+line)
+					}
+				}
+			}
 		}
 	}
 }
 
-// truncate truncates a string to the specified length
+// truncate truncates a string to the specified length and flattens newlines
 func truncate(s string, maxLen int) string {
-	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ") // Flatten newlines for single-line display
 	s = strings.TrimSpace(s)
 	if len(s) <= maxLen {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// splitContentLines splits content into lines, filtering empty lines and normalizing whitespace
+func splitContentLines(s string) []string {
+	// Normalize line endings (handle \r\n and \r)
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	s = strings.TrimSpace(s)
+
+	if !strings.Contains(s, "\n") {
+		return []string{s}
+	}
+
+	// Split and filter empty lines
+	rawLines := strings.Split(s, "\n")
+	var result []string
+	for _, line := range rawLines {
+		line = strings.TrimSpace(line) // Use TrimSpace to handle all Unicode whitespace
+		if line != "" {
+			result = append(result, line)
+		}
+	}
+
+	if len(result) == 0 {
+		return []string{s} // Fallback if all lines were empty
+	}
+	return result
 }
 
 // FormatDuration formats a duration in a human-readable way
@@ -410,4 +435,3 @@ func FormatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%.1fh", d.Hours())
 }
-

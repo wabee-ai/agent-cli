@@ -65,11 +65,11 @@ type Message struct {
 
 // ChatRequest represents a request to the chat endpoint
 type ChatRequest struct {
-	Messages         []Message         `json:"messages"`
-	DataFilterHints  []DataFilterHint  `json:"data_filter_hints,omitempty"`
-	AutoMemoryRetain bool              `json:"auto_memory_retain,omitempty"`
-	ContextFiles     []string          `json:"context_files,omitempty"`
-	Images           []ImageInput      `json:"images,omitempty"`
+	Messages         []Message        `json:"messages"`
+	DataFilterHints  []DataFilterHint `json:"data_filter_hints,omitempty"`
+	AutoMemoryRetain bool             `json:"auto_memory_retain,omitempty"`
+	ContextFiles     []string         `json:"context_files,omitempty"`
+	Images           []ImageInput     `json:"images,omitempty"`
 }
 
 // DataFilterHint represents a filter hint for tools
@@ -220,16 +220,14 @@ type RequestTrace struct {
 
 // TraceStep represents a step in the execution trace
 type TraceStep struct {
-	StepNumber      int           `json:"step_number"`
-	StepName        string        `json:"step_name"`
-	StartedAt       string        `json:"started_at,omitempty"`
-	EndedAt         string        `json:"ended_at,omitempty"`
-	DurationMs      *int          `json:"duration_ms,omitempty"`
-	Type            string        `json:"type"`
-	Tool            *ToolCallInfo `json:"tool,omitempty"`
-	TokensGenerated *int          `json:"tokens_generated,omitempty"`
-	Content         string        `json:"content,omitempty"`
-	EventCount      int           `json:"event_count"`
+	StepNumber int    `json:"step_number"`
+	StepName   string `json:"step_name"`
+	StartedAt  string `json:"started_at,omitempty"`
+	EndedAt    string `json:"ended_at,omitempty"`
+	DurationMs *int   `json:"duration_ms,omitempty"`
+	Type       string `json:"type"`
+	Content    string `json:"content,omitempty"`
+	EventCount int    `json:"event_count"`
 }
 
 // ToolCallInfo represents information about a tool call
@@ -259,10 +257,10 @@ type AgentInfo struct {
 
 // HealthStatus represents agent health check response
 type HealthStatus struct {
-	Status    string            `json:"status"`
-	Version   string            `json:"version,omitempty"`
-	Uptime    float64           `json:"uptime_seconds,omitempty"`
-	Checks    map[string]string `json:"checks,omitempty"`
+	Status  string            `json:"status"`
+	Version string            `json:"version,omitempty"`
+	Uptime  float64           `json:"uptime_seconds,omitempty"`
+	Checks  map[string]string `json:"checks,omitempty"`
 }
 
 // APIError represents an error response from the API
