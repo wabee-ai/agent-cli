@@ -70,6 +70,7 @@ type ChatRequest struct {
 	AutoMemoryRetain bool             `json:"auto_memory_retain,omitempty"`
 	ContextFiles     []string         `json:"context_files,omitempty"`
 	Images           []ImageInput     `json:"images,omitempty"`
+	Budget           *Budget          `json:"budget,omitempty"`
 }
 
 // DataFilterHint represents a filter hint for tools
@@ -84,6 +85,11 @@ type DataFilterHint struct {
 type ImageInput struct {
 	Content string `json:"content"`
 	Type    string `json:"type"` // "base64" or "file_path"
+}
+
+// Budget represents the budget configuration for agent execution
+type Budget struct {
+	LocalRecursionLimit int `json:"local_recursion_limit"`
 }
 
 // NewChatRequest creates a ChatRequest from a simple user message

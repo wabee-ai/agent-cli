@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	taskSessionFlag string
-	taskStreamFlag  bool
+	taskSessionFlag     string
+	taskStreamFlag      bool
+	taskStepsBudgetFlag int
 )
 
 var taskCmd = &cobra.Command{
@@ -78,11 +79,13 @@ Examples:
 func init() {
 	// Flags for 'task new'
 	taskNewCmd.Flags().BoolVar(&taskStreamFlag, "stream", true, "stream response in real-time")
+	taskNewCmd.Flags().IntVar(&taskStepsBudgetFlag, "steps-budget", 0, "max steps the agent can perform (min: 4, 0 = use default)")
 
 	// Flags for 'task followup'
 	taskFollowupCmd.Flags().StringVarP(&taskSessionFlag, "session", "s", "", "session ID to continue conversation (required)")
 	_ = taskFollowupCmd.MarkFlagRequired("session")
 	taskFollowupCmd.Flags().BoolVar(&taskStreamFlag, "stream", true, "stream response in real-time")
+	taskFollowupCmd.Flags().IntVar(&taskStepsBudgetFlag, "steps-budget", 0, "max steps the agent can perform (min: 4, 0 = use default)")
 
 	// Add subcommands to task
 	taskCmd.AddCommand(taskNewCmd)
@@ -103,16 +106,25 @@ func runTaskNew(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no message provided. Use: wabee task new \"your message\" or pipe from stdin")
 	}
 
+	// Validate budget if provided
+	var budget *int
+	if taskStepsBudgetFlag != 0 {
+		if taskStepsBudgetFlag < 4 {
+			return fmt.Errorf("budget must be at least 4 (got %d)", taskStepsBudgetFlag)
+		}
+		budget = &taskStepsBudgetFlag
+	}
+
 	// Determine output format
 	format := getOutputFormat()
 
 	// Non-streaming mode or JSON output
 	if !taskStreamFlag || format == "json" {
-		return runNonStreamingTask(ctx, apiClient, message, "")
+		return runNonStreamingTask(ctx, apiClient, message, "", budget)
 	}
 
 	// Streaming mode
-	return runStreamingTask(ctx, apiClient, message, "")
+	return runStreamingTask(ctx, apiClient, message, "", budget)
 }
 
 func runTaskFollowup(cmd *cobra.Command, args []string) error {
@@ -129,16 +141,25 @@ func runTaskFollowup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no message provided. Use: wabee task followup --session <id> \"your message\" or pipe from stdin")
 	}
 
+	// Validate budget if provided
+	var budget *int
+	if taskStepsBudgetFlag != 0 {
+		if taskStepsBudgetFlag < 4 {
+			return fmt.Errorf("budget must be at least 4 (got %d)", taskStepsBudgetFlag)
+		}
+		budget = &taskStepsBudgetFlag
+	}
+
 	// Determine output format
 	format := getOutputFormat()
 
 	// Non-streaming mode or JSON output
 	if !taskStreamFlag || format == "json" {
-		return runNonStreamingTask(ctx, apiClient, message, taskSessionFlag)
+		return runNonStreamingTask(ctx, apiClient, message, taskSessionFlag, budget)
 	}
 
 	// Streaming mode
-	return runStreamingTask(ctx, apiClient, message, taskSessionFlag)
+	return runStreamingTask(ctx, apiClient, message, taskSessionFlag, budget)
 }
 
 func getTaskMessage(args []string) (string, error) {
@@ -161,7 +182,7 @@ func getTaskMessage(args []string) (string, error) {
 	return "", nil
 }
 
-func runNonStreamingTask(ctx context.Context, apiClient *client.Client, message, sessionID string) error {
+func runNonStreamingTask(ctx context.Context, apiClient *client.Client, message, sessionID string, budget *int) error {
 	formatter := getFormatter()
 	format := getOutputFormat()
 
@@ -173,7 +194,7 @@ func runNonStreamingTask(ctx context.Context, apiClient *client.Client, message,
 		}
 	}
 
-	resp, err := apiClient.Chat(ctx, message, sessionID)
+	resp, err := apiClient.Chat(ctx, message, sessionID, budget)
 	if err != nil {
 		return fmt.Errorf("task failed: %w", err)
 	}
@@ -197,7 +218,7 @@ func runNonStreamingTask(ctx context.Context, apiClient *client.Client, message,
 	return nil
 }
 
-func runStreamingTask(ctx context.Context, apiClient *client.Client, message, sessionID string) error {
+func runStreamingTask(ctx context.Context, apiClient *client.Client, message, sessionID string, budget *int) error {
 	var responseBuilder strings.Builder
 	var spinner *output.Spinner
 	answerLabelPrinted := false
@@ -207,7 +228,7 @@ func runStreamingTask(ctx context.Context, apiClient *client.Client, message, se
 		spinner = output.NewSpinner("Thinking...")
 	}
 
-	result, err := apiClient.ChatStream(ctx, message, sessionID, func(event models.StreamEventData) error {
+	result, err := apiClient.ChatStream(ctx, message, sessionID, budget, func(event models.StreamEventData) error {
 		// Check for errors
 		if event.FinishReason == "error" {
 			if spinner != nil {
