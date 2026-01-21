@@ -142,8 +142,15 @@ func handleResponse(resp *http.Response, target interface{}) error {
 type StreamCallback func(event models.StreamEventData) error
 
 // Chat sends a chat message and returns the response
-func (c *Client) Chat(ctx context.Context, input string, sessionID string) (*models.ChatResponse, error) {
+func (c *Client) Chat(ctx context.Context, input string, sessionID string, budget *int) (*models.ChatResponse, error) {
 	req := models.NewChatRequest(input)
+
+	// Add budget if specified
+	if budget != nil {
+		req.Budget = &models.Budget{
+			LocalRecursionLimit: *budget,
+		}
+	}
 
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
@@ -183,8 +190,15 @@ type StreamResult struct {
 }
 
 // ChatStream sends a chat message and streams the response
-func (c *Client) ChatStream(ctx context.Context, input string, sessionID string, callback StreamCallback) (*StreamResult, error) {
+func (c *Client) ChatStream(ctx context.Context, input string, sessionID string, budget *int, callback StreamCallback) (*StreamResult, error) {
 	req := models.NewChatRequest(input)
+
+	// Add budget if specified
+	if budget != nil {
+		req.Budget = &models.Budget{
+			LocalRecursionLimit: *budget,
+		}
+	}
 
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
